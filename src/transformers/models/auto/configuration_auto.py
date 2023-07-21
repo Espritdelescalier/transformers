@@ -456,7 +456,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("cpm", "CPM"),
         ("cpmant", "CPM-Ant"),
         ("ctrl", "CTRL"),
-        ("curformer", "CURFORMER"),
+        ("cur", "CUR"),
         ("cvt", "CvT"),
         ("data2vec-audio", "Data2VecAudio"),
         ("data2vec-text", "Data2VecText"),
