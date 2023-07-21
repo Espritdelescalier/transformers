@@ -62,6 +62,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("convnextv2", "ConvNextV2Config"),
         ("cpmant", "CpmAntConfig"),
         ("ctrl", "CTRLConfig"),
+        ("cur", "CURconfid"),
         ("cvt", "CvtConfig"),
         ("data2vec-audio", "Data2VecAudioConfig"),
         ("data2vec-text", "Data2VecTextConfig"),
@@ -235,7 +236,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("align", "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("audio-spectrogram-transformer", "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("audio-spectrogram-transformer",
+         "AUDIO_SPECTROGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("autoformer", "AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("bart", "BART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("beit", "BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -381,7 +383,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("t5", "T5_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("table-transformer", "TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("tapas", "TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-        ("time_series_transformer", "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("time_series_transformer",
+         "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("timesformer", "TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("transfo-xl", "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("tvlt", "TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -453,6 +456,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("cpm", "CPM"),
         ("cpmant", "CPM-Ant"),
         ("ctrl", "CTRL"),
+        ("curformer", "CURFORMER"),
         ("cvt", "CvT"),
         ("data2vec-audio", "Data2VecAudio"),
         ("data2vec-text", "Data2VecText"),
@@ -706,7 +710,8 @@ class _LazyConfigMapping(OrderedDict):
         value = self._mapping[key]
         module_name = model_type_to_module_name(key)
         if module_name not in self._modules:
-            self._modules[module_name] = importlib.import_module(f".{module_name}", "transformers.models")
+            self._modules[module_name] = importlib.import_module(
+                f".{module_name}", "transformers.models")
         if hasattr(self._modules[module_name], value):
             return getattr(self._modules[module_name], value)
 
@@ -735,7 +740,8 @@ class _LazyConfigMapping(OrderedDict):
         Register a new configuration in this mapping.
         """
         if key in self._mapping.keys() and not exist_ok:
-            raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
+            raise ValueError(
+                f"'{key}' is already used by a Transformers config, pick another name.")
         self._extra_content[key] = value
 
 
@@ -767,7 +773,8 @@ class _LazyLoadAllMappings(OrderedDict):
 
         for model_type, map_name in self._mapping.items():
             module_name = model_type_to_module_name(model_type)
-            module = importlib.import_module(f".{module_name}", "transformers.models")
+            module = importlib.import_module(
+                f".{module_name}", "transformers.models")
             mapping = getattr(module, map_name)
             self._data.update(mapping)
 
@@ -798,7 +805,8 @@ class _LazyLoadAllMappings(OrderedDict):
         return item in self._data
 
 
-ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = _LazyLoadAllMappings(CONFIG_ARCHIVE_MAP_MAPPING_NAMES)
+ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = _LazyLoadAllMappings(
+    CONFIG_ARCHIVE_MAP_MAPPING_NAMES)
 
 
 def _get_class_name(model_class: Union[str, List[str]]):
@@ -809,10 +817,12 @@ def _get_class_name(model_class: Union[str, List[str]]):
 
 def _list_model_options(indent, config_to_class=None, use_model_types=True):
     if config_to_class is None and not use_model_types:
-        raise ValueError("Using `use_model_types=False` requires a `config_to_class` dictionary.")
+        raise ValueError(
+            "Using `use_model_types=False` requires a `config_to_class` dictionary.")
     if use_model_types:
         if config_to_class is None:
-            model_type_to_name = {model_type: f"[`{config}`]" for model_type, config in CONFIG_MAPPING_NAMES.items()}
+            model_type_to_name = {
+                model_type: f"[`{config}`]" for model_type, config in CONFIG_MAPPING_NAMES.items()}
         else:
             model_type_to_name = {
                 model_type: _get_class_name(model_class)
@@ -851,7 +861,8 @@ def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True
             indent = re.search(r"^(\s*)List options\s*$", lines[i]).groups()[0]
             if use_model_types:
                 indent = f"{indent}    "
-            lines[i] = _list_model_options(indent, config_to_class=config_to_class, use_model_types=use_model_types)
+            lines[i] = _list_model_options(
+                indent, config_to_class=config_to_class, use_model_types=use_model_types)
             docstrings = "\n".join(lines)
         else:
             raise ValueError(
@@ -975,16 +986,20 @@ class AutoConfig:
         kwargs["_from_auto"] = True
         kwargs["name_or_path"] = pretrained_model_name_or_path
         trust_remote_code = kwargs.pop("trust_remote_code", None)
-        config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
-        has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
+        config_dict, unused_kwargs = PretrainedConfig.get_config_dict(
+            pretrained_model_name_or_path, **kwargs)
+        has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict[
+            "auto_map"]
+        has_local_code = "model_type" in config_dict and config_dict[
+            "model_type"] in CONFIG_MAPPING
         trust_remote_code = resolve_trust_remote_code(
             trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
         )
 
         if has_remote_code and trust_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
-            config_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+            config_class = get_class_from_dynamic_module(
+                class_ref, pretrained_model_name_or_path, **kwargs)
             if os.path.isdir(pretrained_model_name_or_path):
                 config_class.register_for_auto_class()
             _ = kwargs.pop("code_revision", None)
