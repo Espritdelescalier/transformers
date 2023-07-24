@@ -229,11 +229,12 @@ class CURAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
     ):
-        tgt_len, bsz, embed_dim = query.size()
+        print(query.size())
+        bsz, head_number, tgt_len, emb = query.size()
         q = query.to(torch.float32)
         k = key.to(torch.float32)
 
-        nr, r_index, r_mask = self.func_q_select(
+        nr, r_index, r_mask = self.top_k_sum_selection(
             T=q,
             select_number=self.select_number,
             mask=None,

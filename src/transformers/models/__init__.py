@@ -52,6 +52,7 @@ from . import (
     cpm,
     cpmant,
     ctrl,
+    cur,
     cvt,
     data2vec,
     deberta,

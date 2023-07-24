@@ -22,7 +22,8 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig", "GPTJOnnxConfig"]}
+_import_structure = {"configuration_cur": [
+    "CUR_PRETRAINED_CONFIG_ARCHIVE_MAP", "CURConfig", "CUROnnxConfig"]}
 
 try:
     if not is_torch_available():
@@ -30,13 +31,13 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_gptj"] = [
-        "GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "GPTJForCausalLM",
-        "GPTJForQuestionAnswering",
-        "GPTJForSequenceClassification",
-        "GPTJModel",
-        "GPTJPreTrainedModel",
+    _import_structure["modeling_cur"] = [
+        "CUR_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "CURForCausalLM",
+        "CURForQuestionAnswering",
+        "CURForSequenceClassification",
+        "CURModel",
+        "CURPreTrainedModel",
     ]
 
 try:
@@ -45,12 +46,12 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_tf_gptj"] = [
-        "TFGPTJForCausalLM",
-        "TFGPTJForQuestionAnswering",
-        "TFGPTJForSequenceClassification",
-        "TFGPTJModel",
-        "TFGPTJPreTrainedModel",
+    _import_structure["modeling_tf_cur"] = [
+        "TFCURForCausalLM",
+        "TFCURForQuestionAnswering",
+        "TFCURForSequenceClassification",
+        "TFCURModel",
+        "TFCURPreTrainedModel",
     ]
 
 try:
@@ -59,15 +60,15 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_flax_gptj"] = [
-        "FlaxGPTJForCausalLM",
-        "FlaxGPTJModel",
-        "FlaxGPTJPreTrainedModel",
+    _import_structure["modeling_flax_cur"] = [
+        "FlaxCURForCausalLM",
+        "FlaxCURModel",
+        "FlaxCURPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig, GPTJOnnxConfig
+    from .configuration_gptj import CUR_PRETRAINED_CONFIG_ARCHIVE_MAP, CURConfig, CUROnnxConfig
 
     try:
         if not is_torch_available():
@@ -76,12 +77,12 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_gptj import (
-            GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTJForCausalLM,
-            GPTJForQuestionAnswering,
-            GPTJForSequenceClassification,
-            GPTJModel,
-            GPTJPreTrainedModel,
+            CUR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CURForCausalLM,
+            CURForQuestionAnswering,
+            CURForSequenceClassification,
+            CURModel,
+            CURPreTrainedModel,
         )
 
     try:
@@ -91,11 +92,11 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_gptj import (
-            TFGPTJForCausalLM,
-            TFGPTJForQuestionAnswering,
-            TFGPTJForSequenceClassification,
-            TFGPTJModel,
-            TFGPTJPreTrainedModel,
+            TFCURForCausalLM,
+            TFCURForQuestionAnswering,
+            TFCURForSequenceClassification,
+            TFCURModel,
+            TFCURPreTrainedModel,
         )
 
     try:
@@ -104,9 +105,10 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_gptj import FlaxGPTJForCausalLM, FlaxGPTJModel, FlaxGPTJPreTrainedModel
+        from .modeling_flax_gptj import FlaxCURForCausalLM, FlaxCURModel, FlaxCURPreTrainedModel
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__)

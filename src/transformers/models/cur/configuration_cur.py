@@ -32,7 +32,7 @@ GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CURConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CURModel`]. It is used to instantiate a GPT-J
+    This is the configuration class to store the configuration of a [`CURModel`]. It is used to instantiate a CUR
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the GPT-J
     [EleutherAI/gpt-j-6B](https://huggingface.co/EleutherAI/gpt-j-6B) architecture. Configuration objects inherit from
@@ -41,7 +41,7 @@ class CURConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50400):
-            Vocabulary size of the GPT-J model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the CUR model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`CURModel`].
         n_positions (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
