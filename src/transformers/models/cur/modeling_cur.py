@@ -101,6 +101,11 @@ class CURAttention(nn.Module):
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
+        self.select_number = config.select_number
+        self.select_type = config.select_type
+        self.newcur = config.newcur
+        self.onnx_trace = config.onnx_trace
+
         self.embed_dim = config.hidden_size
         self.num_attention_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_attention_heads
@@ -229,7 +234,10 @@ class CURAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
     ):
-        print(query.size())
+        print("q", query.size())
+        query_length, key_length = query.size(-2), key.size(-2)
+        causal_mask = self.bias[:, :, key_length -
+                                query_length: key_length, :key_length]
         bsz, head_number, tgt_len, emb = query.size()
         q = query.to(torch.float32)
         k = key.to(torch.float32)
@@ -242,30 +250,34 @@ class CURAttention(nn.Module):
         )
 
         r = nr @ k.transpose(-1, -2)
+        print("r", r.size())
 
         if attention_mask is not None:
             r_mask = self.get_r_mask(
                 tgt_len, self.select_number, attention_mask)
-            r_mask = r_mask.unsqueeze(0).unsqueeze(0)
+            # r_mask = r_mask.unsqueeze(0).unsqueeze(0)
             if self.onnx_trace:
                 r_mask = r_mask.repeat(bsz, self.num_heads, 1, 1)
+            print("r_mask", r_mask.size())
             r += r_mask
 
             kernel_3_f = nn.functional.softmax(r, dim=-1)
             kernel_3 = kernel_3_f.type_as(r)
 
-            nc, c_index, c_mask = self.func_k_select(
-                T=k, select_number=self.select_number, mask=None,
-                attn_mask=attention_mask, R=(kernel_3.transpose(-1, -2) if self.newcur else None))
+        nc, c_index, c_mask = self.top_k_sum_selection(
+            T=k, select_number=self.select_number, mask=None,
+            attn_mask=attention_mask, R=(kernel_3.transpose(-1, -2) if self.newcur else None))
 
-            c = q @ nc.transpose(-1, -2)
+        c = q @ nc.transpose(-1, -2)
+        print("c", c.size())
 
         if attention_mask is not None:
             c_mask = self.get_c_mask(
                 tgt_len, self.select_number, attention_mask)
-            c_mask = c_mask.unsqueeze(0).unsqueeze(0)
+            # c_mask = c_mask.unsqueeze(0).unsqueeze(0)
             if self.onnx_trace:
                 c_mask = c_mask.repeat(bsz, self.num_heads, 1, 1)
+            print("c_mask", c_mask.size())
             c += c_mask
 
         kernel_1_f = nn.functional.softmax(c, dim=-1)
@@ -292,7 +304,7 @@ class CURAttention(nn.Module):
             attn_output = attn.contiguous().view(tgt_len, bsz, embed_dim)
         else:
             attn_output = attn.transpose(0, 1).contiguous().view(
-                tgt_len, bsz, embed_dim)
+                tgt_len, bsz, head_number*emb)  # embed_dim)
         attn = self.out_proj(attn)
         attn_weights: Optional[Tensor] = None
 
@@ -398,6 +410,7 @@ class CURAttention(nn.Module):
             present = None
 
         # compute self-attention: V x Softmax(QK^T)
+        print("attention_mask before the rest", attention_mask.size())
         attn_output, attn_weights = self._attn(
             query, key, value, attention_mask, head_mask)
 
@@ -615,12 +628,13 @@ DEPARALLELIZE_DOCSTRING = r"""
         3: [21, 22, 23, 24, 25, 26, 27],
     }
     model.parallelize(device_map)  # Splits the model across several devices
-    model.deparallelize()  # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
+    # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
+    model.deparallelize()
     ```
 """
 
 
-@add_start_docstrings(
+@ add_start_docstrings(
     "The bare CUR Model transformer outputting raw hidden-states without any specific head on top.",
     CUR_START_DOCSTRING,
 )
@@ -633,7 +647,7 @@ class CURModel(CURPreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([CURBlock(config)
-                               for _ in range(config.n_layer)])
+                                for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         # Model parallel
@@ -644,7 +658,7 @@ class CURModel(CURPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
+    @ add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
         warnings.warn(
             "`CURModel.parallelize` is deprecated and will be removed in v5 of Transformers, you should load your"
@@ -672,7 +686,7 @@ class CURModel(CURPreTrainedModel):
         # ln_f to last
         self.ln_f = self.ln_f.to(self.last_device)
 
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
+    @ add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
         warnings.warn(
             "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
@@ -694,8 +708,8 @@ class CURModel(CURPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
-    @add_start_docstrings_to_model_forward(CUR_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
+    @ add_start_docstrings_to_model_forward(CUR_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @ add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -760,12 +774,13 @@ class CURModel(CURPreTrainedModel):
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
             attention_mask = attention_mask.view(batch_size, -1)
+            print("attention mask nefore time itself", attention_mask.size())
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask = attention_mask[:, None, None, :]
+            # attention_mask = attention_mask[:, None, None, :]
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
@@ -882,7 +897,7 @@ class CURModel(CURPreTrainedModel):
         )
 
 
-@add_start_docstrings(
+@ add_start_docstrings(
     """
     The CUR Model transformer with a language modeling head on top.
     """,
@@ -903,7 +918,7 @@ class CURForCausalLM(CURPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
+    @ add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
         warnings.warn(
             "`CURForCausalLM.parallelize` is deprecated and will be removed in v5 of Transformers, you should load"
@@ -923,7 +938,7 @@ class CURForCausalLM(CURPreTrainedModel):
         self.lm_head = self.lm_head.to(self.transformer.first_device)
         self.model_parallel = True
 
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
+    @ add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
         warnings.warn(
             "Like `parallelize`, `deparallelize` is deprecated and will be removed in v5 of Transformers.",
@@ -977,8 +992,8 @@ class CURForCausalLM(CURPreTrainedModel):
 
         return model_inputs
 
-    @add_start_docstrings_to_model_forward(CUR_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
+    @ add_start_docstrings_to_model_forward(CUR_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @ add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -1058,7 +1073,7 @@ class CURForCausalLM(CURPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
-    @staticmethod
+    @ staticmethod
     def _reorder_cache(
         past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
     ) -> Tuple[Tuple[torch.Tensor]]:
@@ -1074,7 +1089,7 @@ class CURForCausalLM(CURPreTrainedModel):
         )
 
 
-@add_start_docstrings(
+@ add_start_docstrings(
     """
     The CUR Model transformer with a sequence classification head on top (linear layer).
 
@@ -1103,8 +1118,8 @@ class CURForSequenceClassification(CURPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CUR_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
+    @ add_start_docstrings_to_model_forward(CUR_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @ add_code_sample_docstrings(
         checkpoint="ydshieh/tiny-random-cur-for-sequence-classification",
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -1210,7 +1225,7 @@ class CURForSequenceClassification(CURPreTrainedModel):
         )
 
 
-@add_start_docstrings(
+@ add_start_docstrings(
     """
     The CUR Model transformer with a span classification head on top for extractive question-answering tasks like
     SQuAD (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
@@ -1231,8 +1246,8 @@ class CURForQuestionAnswering(CURPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CUR_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
+    @ add_start_docstrings_to_model_forward(CUR_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @ add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,

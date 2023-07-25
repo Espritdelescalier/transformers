@@ -123,7 +123,9 @@ class CURConfig(PretrainedConfig):
         self.n_head = n_head
         self.n_inner = n_inner
         self.select_type = select_type
-        self.selet_number = select_number
+        self.select_number = select_number
+        self.newcur = True
+        self.onnx_trace = False
         self.rotary_dim = rotary_dim
         self.activation_function = activation_function
         self.resid_pdrop = resid_pdrop
