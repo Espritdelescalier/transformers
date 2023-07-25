@@ -140,12 +140,15 @@ class CURAttention(nn.Module):
             somme = torch.sum(
                 (matrix_metric.abs() if self.absolute else matrix_metric), -1)
         if mask is not None:
-            somme = somme.masked_fill(
-                mask, -torch.finfo(somme.dtype).max)
+            """somme = somme.masked_fill(
+                mask, -torch.finfo(somme.dtype).max)"""
+            somme = somme + mask
         top = torch.topk(input=somme, k=select_number,
                          dim=-1).indices
 
+        print("top", top.size())
         index, _ = torch.sort(top, -1)
+        print("index", index.size())
         index_shift = einops.rearrange(index, 'b h n -> (b h n)')
         shift = torch.arange(0, B * H * N, N, device=device)
         shift = torch.repeat_interleave(shift, select_number)
@@ -236,8 +239,9 @@ class CURAttention(nn.Module):
     ):
         print("q", query.size())
         query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length -
+        causal_mask = self.bias[key_length -
                                 query_length: key_length, :key_length]
+        print("attention mask from bias", causal_mask.size())
         bsz, head_number, tgt_len, emb = query.size()
         q = query.to(torch.float32)
         k = key.to(torch.float32)
@@ -245,39 +249,37 @@ class CURAttention(nn.Module):
         nr, r_index, r_mask = self.top_k_sum_selection(
             T=q,
             select_number=self.select_number,
-            mask=None,
+            mask=attention_mask,
             attn_mask=attention_mask
         )
 
         r = nr @ k.transpose(-1, -2)
-        print("r", r.size())
 
-        if attention_mask is not None:
+        if causal_mask is not None:
             r_mask = self.get_r_mask(
-                tgt_len, self.select_number, attention_mask)
-            # r_mask = r_mask.unsqueeze(0).unsqueeze(0)
+                tgt_len, self.select_number, causal_mask)
+            print("r_mask", r_mask.size())
+            print("r", r.size())
+            r_mask = r_mask.unsqueeze(0).unsqueeze(0)
             if self.onnx_trace:
                 r_mask = r_mask.repeat(bsz, self.num_heads, 1, 1)
-            print("r_mask", r_mask.size())
             r += r_mask
 
             kernel_3_f = nn.functional.softmax(r, dim=-1)
             kernel_3 = kernel_3_f.type_as(r)
 
         nc, c_index, c_mask = self.top_k_sum_selection(
-            T=k, select_number=self.select_number, mask=None,
+            T=k, select_number=self.select_number, mask=attention_mask,
             attn_mask=attention_mask, R=(kernel_3.transpose(-1, -2) if self.newcur else None))
 
         c = q @ nc.transpose(-1, -2)
-        print("c", c.size())
 
-        if attention_mask is not None:
+        if causal_mask is not None:
             c_mask = self.get_c_mask(
-                tgt_len, self.select_number, attention_mask)
-            # c_mask = c_mask.unsqueeze(0).unsqueeze(0)
+                tgt_len, self.select_number, causal_mask)
+            c_mask = c_mask.unsqueeze(0).unsqueeze(0)
             if self.onnx_trace:
                 c_mask = c_mask.repeat(bsz, self.num_heads, 1, 1)
-            print("c_mask", c_mask.size())
             c += c_mask
 
         kernel_1_f = nn.functional.softmax(c, dim=-1)
@@ -410,7 +412,6 @@ class CURAttention(nn.Module):
             present = None
 
         # compute self-attention: V x Softmax(QK^T)
-        print("attention_mask before the rest", attention_mask.size())
         attn_output, attn_weights = self._attn(
             query, key, value, attention_mask, head_mask)
 
@@ -774,13 +775,13 @@ class CURModel(CURPreTrainedModel):
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
             attention_mask = attention_mask.view(batch_size, -1)
-            print("attention mask nefore time itself", attention_mask.size())
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            # attention_mask = attention_mask[:, None, None, :]
+            #attention_mask = attention_mask[:, None, None, :]
+            attention_mask = attention_mask[:,  None, :]
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
