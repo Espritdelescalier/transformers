@@ -129,6 +129,7 @@ class CURAttention(nn.Module):
     def top_k_sum_selection(self, T, select_number, mask=None, attn_mask=None, R=None):
         B, H, N, D = T.shape
         device = T.device
+        #print("T", T.size())
 
         matrix_metric = T if R is None else R
 
@@ -146,9 +147,9 @@ class CURAttention(nn.Module):
         top = torch.topk(input=somme, k=select_number,
                          dim=-1).indices
 
-        print("top", top.size())
+        #print("top", top.size())
         index, _ = torch.sort(top, -1)
-        print("index", index.size())
+        #print("index", index.size())
         index_shift = einops.rearrange(index, 'b h n -> (b h n)')
         shift = torch.arange(0, B * H * N, N, device=device)
         shift = torch.repeat_interleave(shift, select_number)
@@ -237,11 +238,11 @@ class CURAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
     ):
-        print("q", query.size())
+        #print("q", query.size())
         query_length, key_length = query.size(-2), key.size(-2)
         causal_mask = self.bias[key_length -
                                 query_length: key_length, :key_length]
-        print("attention mask from bias", causal_mask.size())
+        #print("attention mask from bias", causal_mask.size())
         bsz, head_number, tgt_len, emb = query.size()
         q = query.to(torch.float32)
         k = key.to(torch.float32)
@@ -257,12 +258,12 @@ class CURAttention(nn.Module):
 
         if causal_mask is not None:
             r_mask = self.get_r_mask(
-                tgt_len, self.select_number, causal_mask)
-            print("r_mask", r_mask.size())
-            print("r", r.size())
+                tgt_len, self.select_number, causal_mask.squeeze())
+            #print("r_mask", r_mask.size())
+            #print("r", r.size())
             r_mask = r_mask.unsqueeze(0).unsqueeze(0)
             if self.onnx_trace:
-                r_mask = r_mask.repeat(bsz, self.num_heads, 1, 1)
+                pass  # r_mask = r_mask.repeat(bsz, self.num_heads, 1, 1)
             r += r_mask
 
             kernel_3_f = nn.functional.softmax(r, dim=-1)
@@ -276,10 +277,10 @@ class CURAttention(nn.Module):
 
         if causal_mask is not None:
             c_mask = self.get_c_mask(
-                tgt_len, self.select_number, causal_mask)
+                tgt_len, self.select_number, causal_mask.squeeze())
             c_mask = c_mask.unsqueeze(0).unsqueeze(0)
             if self.onnx_trace:
-                c_mask = c_mask.repeat(bsz, self.num_heads, 1, 1)
+                pass  # c_mask = c_mask.repeat(bsz, self.num_heads, 1, 1)
             c += c_mask
 
         kernel_1_f = nn.functional.softmax(c, dim=-1)
@@ -297,17 +298,17 @@ class CURAttention(nn.Module):
 
         attn = torch.matmul(x, torch.matmul(kernel_3, value))
 
-        attn = attn.view(bsz * self.num_heads, tgt_len, self.head_dim)
+        attn = attn.view(bsz * head_number, tgt_len, emb)
         assert list(attn.size()) == [
-            bsz * self.num_heads, tgt_len, self.head_dim]
+            bsz * head_number, tgt_len, emb]
         if self.onnx_trace and attn.size(1) == 1:
             # when ONNX tracing a single decoder step (sequence length == 1)
             # the transpose is a no-op copy before view, thus unnecessary
-            attn_output = attn.contiguous().view(tgt_len, bsz, embed_dim)
+            attn_output = attn.contiguous().view(tgt_len, bsz, head_number*emb)
         else:
             attn_output = attn.transpose(0, 1).contiguous().view(
-                tgt_len, bsz, head_number*emb)  # embed_dim)
-        attn = self.out_proj(attn)
+                bsz, tgt_len, head_number*emb)  # embed_dim)
+        attn = self.out_proj(attn_output)
         attn_weights: Optional[Tensor] = None
 
         return attn_output, attn_weights
@@ -476,6 +477,9 @@ class CURBlock(nn.Module):
         outputs = attn_outputs[1:]
 
         feed_forward_hidden_states = self.mlp(hidden_states)
+        #print("feed forward hidden states", feed_forward_hidden_states.size())
+        #print("residual", residual.size())
+        #print("attn_output", attn_output.size())
         hidden_states = attn_output + feed_forward_hidden_states + residual
 
         if use_cache:
