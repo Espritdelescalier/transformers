@@ -143,7 +143,7 @@ class CURAttention(nn.Module):
             """somme = somme.masked_fill(
                 mask, -torch.finfo(somme.dtype).max)"""
             somme = somme + mask
-        if N == 1:
+        if N < select_number:
             select_number = N
         top = torch.topk(input=somme, k=select_number,
                          dim=-1).indices
@@ -219,7 +219,7 @@ class CURAttention(nn.Module):
 
     def get_r_mask(self, N, select_number, attn_mask):
         if N < select_number:
-            N = select_number
+            select_number = N
         pas = (N - 1) // (select_number - 1)
         imax = (2 + (select_number - 1) * pas) - 1
         print(f"{N} N, {pas} pas, {imax}")
@@ -227,10 +227,54 @@ class CURAttention(nn.Module):
 
     def get_c_mask(self, N, select_number, attn_mask):
         if N < select_number:
-            N = select_number
+            select_number = N
         pas = (N - 1) // (select_number - 1)
         imax = (2 + (select_number - 1) * pas) - 1
         return attn_mask[0:N, 0:imax:pas]
+
+    def _fullattn(
+        self,
+        query,
+        key,
+        value,
+        attention_mask=None,
+        head_mask=None,
+    ):
+        # compute causal mask from causal mask buffer
+        query_length, key_length = query.size(-2), key.size(-2)
+        causal_mask = self.bias[:, :, key_length -
+                                query_length: key_length, :key_length]
+
+        # Keep the attention weights computation in fp32 to avoid overflow issues
+        query = query.to(torch.float32)
+        key = key.to(torch.float32)
+
+        attn_weights = torch.matmul(query, key.transpose(-1, -2))
+
+        mask_value = torch.finfo(attn_weights.dtype).min
+        # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
+        # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
+        mask_value = torch.tensor(
+            mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+        attn_weights = torch.where(causal_mask, attn_weights, mask_value)
+
+        attn_weights = attn_weights / self.scale_attn
+
+        if attention_mask is not None:
+            # Apply the attention mask
+            attn_weights = attn_weights + attention_mask
+
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+        attn_weights = attn_weights.to(value.dtype)
+        attn_weights = self.attn_dropout(attn_weights)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attn_weights = attn_weights * head_mask
+
+        attn_output = torch.matmul(attn_weights, value)
+
+        return attn_output, attn_weights
 
     def _attn(
         self,
@@ -416,9 +460,17 @@ class CURAttention(nn.Module):
         else:
             present = None
 
-        # compute self-attention: V x Softmax(QK^T)
-        attn_output, attn_weights = self._attn(
-            query, key, value, attention_mask, head_mask)
+        # for full attention
+        if query.shape[2] < self.select_number:
+            attn_output, attn_weights = self._fullattn(
+                query, key, value, attention_mask, head_mask)
+            attn_output = self._merge_heads(
+                attn_output, self.num_attention_heads, self.head_dim)
+            attn_output = self.out_proj(attn_output)
+        else:
+            # compute self-attention: V x Softmax(QK^T)
+            attn_output, attn_weights = self._attn(
+                query, key, value, attention_mask, head_mask)
 
         attn_output = self.resid_dropout(attn_output)
 
