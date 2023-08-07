@@ -129,7 +129,6 @@ class CURAttention(nn.Module):
     def top_k_sum_selection(self, T, select_number, mask=None, attn_mask=None, R=None):
         B, H, N, D = T.shape
         device = T.device
-        #print("T", T.size())
 
         matrix_metric = T if R is None else R
 
@@ -144,6 +143,8 @@ class CURAttention(nn.Module):
             """somme = somme.masked_fill(
                 mask, -torch.finfo(somme.dtype).max)"""
             somme = somme + mask
+        if N == 1:
+            select_number = N
         top = torch.topk(input=somme, k=select_number,
                          dim=-1).indices
 
@@ -220,15 +221,16 @@ class CURAttention(nn.Module):
         if N < select_number:
             N = select_number
         pas = (N - 1) // (select_number - 1)
-        imax = 2 + (select_number - 1) * pas
-        return attn_mask[0:imax:pas, :]
+        imax = (2 + (select_number - 1) * pas) - 1
+        print(f"{N} N, {pas} pas, {imax}")
+        return attn_mask[0:imax:pas, 0:N]
 
     def get_c_mask(self, N, select_number, attn_mask):
         if N < select_number:
             N = select_number
         pas = (N - 1) // (select_number - 1)
-        imax = 2 + (select_number - 1) * pas
-        return attn_mask[:, 0:imax:pas]
+        imax = (2 + (select_number - 1) * pas) - 1
+        return attn_mask[0:N, 0:imax:pas]
 
     def _attn(
         self,
@@ -238,11 +240,12 @@ class CURAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
     ):
-        #print("q", query.size())
+        print("q", query.size())
+        print("k", key.size())
         query_length, key_length = query.size(-2), key.size(-2)
         causal_mask = self.bias[key_length -
                                 query_length: key_length, :key_length]
-        #print("attention mask from bias", causal_mask.size())
+        print("attention mask from bias", causal_mask.size())
         bsz, head_number, tgt_len, emb = query.size()
         q = query.to(torch.float32)
         k = key.to(torch.float32)
@@ -259,8 +262,8 @@ class CURAttention(nn.Module):
         if causal_mask is not None:
             r_mask = self.get_r_mask(
                 tgt_len, self.select_number, causal_mask.squeeze())
-            #print("r_mask", r_mask.size())
-            #print("r", r.size())
+            print("r_mask", r_mask.size())
+            print("r", r.size())
             r_mask = r_mask.unsqueeze(0).unsqueeze(0)
             if self.onnx_trace:
                 pass  # r_mask = r_mask.repeat(bsz, self.num_heads, 1, 1)
@@ -400,6 +403,7 @@ class CURAttention(nn.Module):
 
         key = key.permute(0, 2, 1, 3)
         query = query.permute(0, 2, 1, 3)
+        print(f"{key.shape} key, {query.shape} query")
 
         if layer_past is not None:
             past_key = layer_past[0]
