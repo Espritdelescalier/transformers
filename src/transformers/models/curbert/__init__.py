@@ -46,7 +46,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_curbert"] = [
         "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "BertForMaskedLM",
+        "CURBertForMaskedLM",
         "BertForMultipleChoice",
         "BertForNextSentencePrediction",
         "BertForPreTraining",

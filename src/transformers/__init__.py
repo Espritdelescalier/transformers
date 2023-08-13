@@ -250,6 +250,7 @@ _import_structure = {
     "models.cpmant": ["CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CpmAntConfig", "CpmAntTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.cur": ["CUR_PRETRAINED_CONFIG_ARCHIVE_MAP", "CURConfig"],
+    "models.curbert": ["CURBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CURBERTConfig"],
     "models.cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvtConfig"],
     "models.data2vec": [
         "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",

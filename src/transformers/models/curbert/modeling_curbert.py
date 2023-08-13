@@ -78,7 +78,7 @@ _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
 _SEQ_CLASS_EXPECTED_LOSS = 0.01
 
 
-BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+CURBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bert-base-uncased",
     "bert-large-uncased",
     "bert-base-cased",
@@ -516,14 +516,14 @@ class BertSelfAttention(nn.Module):
 
         x = torch.matmul(kernel_1, kernel_2_inv)
 
-        context_layer = torch.matmul(attention_probs, value_layer)
+        context_layer = torch.matmul(x, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[
             :-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (
+        outputs = (context_layer, x) if output_attentions else (
             context_layer,)
 
         if self.is_decoder:
@@ -1494,7 +1494,7 @@ class BertLMHeadModel(BertPreTrainedModel):
 
 
 @add_start_docstrings("""Bert Model with a `language modeling` head on top.""", BERT_START_DOCSTRING)
-class BertForMaskedLM(BertPreTrainedModel):
+class CURBertForMaskedLM(BertPreTrainedModel):
     _tied_weights_keys = ["predictions.decoder.bias",
                           "cls.predictions.decoder.weight"]
 
